@@ -1,2 +1,2 @@
-# movie-hunter
+# Movie hunter
 Movie recommendation service
