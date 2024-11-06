@@ -1,222 +1,158 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-class XSVParser<T>
-{
-    public static List<T> Parse(string filePath, char sep, Func<string[], T> mapFunction)
-    {
-        var lines = File.ReadAllLines(filePath).Skip(1);
-        return lines.Select(line => mapFunction(line.Split(sep))).ToList();
-    }
-}
-
-class Movie
-{
-    public string TitleId { get; set; }  // IMDb TitleId
-    public string Title { get; set; }
-    public HashSet<string> Actors { get; set; } = new HashSet<string>();
-    public string Director { get; set; }
-    public HashSet<string> Tags { get; set; } = new HashSet<string>();
-    public double Rating { get; set; }
-
-    public override string ToString()
-    {
-        return $"Title: {Title}, Director: {Director}, Rating: {Rating}, Actors: {string.Join(", ", Actors)}, Tags: {string.Join(", ", Tags)}";
-    }
-}
-
-class MovieDatabase
-{
-    private Dictionary<string, Movie> movies = new Dictionary<string, Movie>();
-    private Dictionary<string, HashSet<Movie>> actorsDirectorsMovies = new Dictionary<string, HashSet<Movie>>();
-    private Dictionary<string, HashSet<Movie>> tagsMovies = new Dictionary<string, HashSet<Movie>>();
-    private Dictionary<string, string> movieIdToTitleId = new Dictionary<string, string>();
-
-    public void AddMovie(Movie movie)
-    {
-        if (!movies.ContainsKey(movie.TitleId))
-        {
-            movies[movie.TitleId] = movie;
-        }
-    }
-
-    public void AddActorDirectorToMovie(string personName, string titleId, bool isDirector)
-    {
-        if (movies.ContainsKey(titleId))
-        {
-            var movie = movies[titleId];
-
-            if (isDirector)
-            {
-                movie.Director = personName;
-            }
-            else
-            {
-                movie.Actors.Add(personName);
-            }
-
-            if (!actorsDirectorsMovies.ContainsKey(personName))
-            {
-                actorsDirectorsMovies[personName] = new HashSet<Movie>();
-            }
-            actorsDirectorsMovies[personName].Add(movie);
-        }
-    }
-
-    public void AddTagToMovie(string tag, string movieId)
-    {
-        if (movieIdToTitleId.ContainsKey(movieId))
-        {
-            string titleId = movieIdToTitleId[movieId];
-
-            if (movies.ContainsKey(titleId))
-            {
-                var movie = movies[titleId];
-                movie.Tags.Add(tag);
-            }
-        }
-    }
-
-    public void SetRatingToMovie(string titleId, double rating)
-    {
-        if (movies.ContainsKey(titleId))
-        {
-            movies[titleId].Rating = rating;
-        }
-    }
-
-    public void AddLinkBetweenMovieIdAndTitleId(string movieId, string imdbId)
-    {
-        string titleId = "tt" + imdbId.PadLeft(7, '0');
-        movieIdToTitleId[movieId] = titleId;
-    }
-
-
-    public Movie SearchMovieByTitle(string title)
-    {
-        return movies.Values.FirstOrDefault(m => m.Title == title);
-    }
-
-    public HashSet<Movie> SearchMoviesByPerson(string name)
-    {
-        return actorsDirectorsMovies.ContainsKey(name) ? actorsDirectorsMovies[name] : null;
-    }
-
-    public HashSet<Movie> SearchMoviesByTag(string tag)
-    {
-        return tagsMovies.ContainsKey(tag) ? tagsMovies[tag] : null;
-    }
-}
 
 class Program
 {
     static void Main(string[] args)
     {
-        MovieDatabase movieDb = new MovieDatabase();
+        var movieDb = new MovieDatabase();
+        LoadData(movieDb);
 
-        var movieList = XSVParser
-    <Movie>.Parse("resources/ml-latest/MovieCodes_IMDB.tsv", '\t', fields =>
+        while (true)
+        {
+            Console.WriteLine("\n================ MENU ================\n");
+            Console.WriteLine("Enter a mode:");
+            Console.WriteLine("1. Search by Movie Title");
+            Console.WriteLine("2. Search by Actor/Director");
+            Console.WriteLine("3. Search by Tag");
+            Console.WriteLine("Type 'exit' to quit.");
+            Console.WriteLine("======================================\n");
+
+            string? mode = Console.ReadLine()?.ToLower();
+
+            if (mode == "exit" || mode == null)
+            {
+                break;
+            }
+
+            switch (mode)
+            {
+                case "1":
+                    Console.Write("Enter the movie title: ");
+                    string? title = Console.ReadLine();
+                    if (title != null)
+                    {
+                        var movie = movieDb.SearchMovieByTitle(title);
+                        Console.WriteLine("\n============== RESULT ==============");
+                        Console.WriteLine(movie != null ? movie.ToString() : "Movie not found.");
+                        Console.WriteLine("====================================\n");
+                    }
+                    break;
+
+                case "2":
+                    Console.Write("Enter the actor/director name: ");
+                    string? name = Console.ReadLine();
+                    if (name != null)
+                    {
+                        var movies = movieDb.SearchMoviesByPerson(name);
+                        Console.WriteLine("\n============== RESULTS ==============");
+                        if (movies != null && movies.Count > 0)
+                        {
+                            foreach (var movie in movies)
+                            {
+                                Console.WriteLine(movie);
+                                Console.WriteLine("------------------------------------");
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine("No movies found for this person.");
+                        }
+                        Console.WriteLine("====================================\n");
+                    }
+                    break;
+
+                case "3":
+                    Console.Write("Enter the tag: ");
+                    string? tag = Console.ReadLine();
+                    if (tag != null)
+                    {
+                        var movies = movieDb.SearchMoviesByTag(tag);
+                        Console.WriteLine("\n============== RESULTS ==============");
+                        if (movies != null && movies.Count > 0)
+                        {
+                            foreach (var movie in movies)
+                            {
+                                Console.WriteLine(movie);
+                                Console.WriteLine("------------------------------------");
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine("No movies found with this tag.");
+                        }
+                        Console.WriteLine("====================================\n");
+                    }
+                    break;
+
+                default:
+                    Console.WriteLine("Invalid mode. Please try again.");
+                    break;
+            }
+        }
+    }
+
+    static void LoadData(MovieDatabase movieDb)
+    {
+        SeparatedFileProcessor.Process("resources/MovieCodes_IMDB.tsv", '\t', fields =>
         {
             string titleId = fields[0];
             string title = fields[2];
-            string language = fields[3];
+            string region = fields[3];
 
-            if (language == "EN" || language == "RU")
+            if (region == "EN" || region == "RU")
             {
-                return new Movie { TitleId = titleId, Title = title };
+                var movie = new Movie { TitleId = titleId, Title = title };
+                movieDb.AddMovie(movie);
             }
-
-            return null;
-        }).Where(m => m != null).ToList();
-
-        foreach (var movie in movieList)
-        {
-            movieDb.AddMovie(movie);
-        }
-
-        var actorsDirectorsList = XSVParser
-    <string[]>.Parse("resources/ml-latest/ActorsDirectorsCodes_IMDB.tsv", '\t', fields => fields);
-        foreach (var fields in actorsDirectorsList)
-        {
-            string titleId = fields[0];
-            string personName = fields[2];
-            string category = fields[3];
-
-            movieDb.AddActorDirectorToMovie(personName, titleId, category == "director");
-        }
-
-        var linksList = XSVParser
-    <string[]>.Parse("resources/ml-latest/links_IMDB_MovieLens.csv", ',', fields =>
-        {
-            string movieId = fields[0];
-            string imdbId = fields[1];
-            return new string[] { movieId, imdbId };
         });
 
-        foreach (var link in linksList)
+        SeparatedFileProcessor.Process("resources/ActorsDirectorsNames_IMDB.txt", '\t', fields =>
         {
-            string movieId = link[0];
-            string imdbId = link[1];
-            movieDb.AddLinkBetweenMovieIdAndTitleId(movieId, imdbId);
-        }
+            string personId = fields[0];
+            string personName = fields[1];
 
+            movieDb.AddActorDirector(personId, personName);
+        });
 
-        var ratingsList = XSVParser
-    <string[]>.Parse("resources/ml-latest/Ratings_IMDB.tsv", '\t', fields => fields);
-        foreach (var fields in ratingsList)
+        SeparatedFileProcessor.Process("resources/ActorsDirectorsCodes_IMDB.tsv", '\t', fields =>
+        {
+            string titleId = fields[0];
+            string personId = fields[2];
+            string category = fields[3];
+
+            movieDb.AddActorDirectorToMovie(personId, titleId, category == "director");
+        });
+
+        SeparatedFileProcessor.Process("resources/Ratings_IMDB.tsv", '\t', fields =>
         {
             string titleId = fields[0];
             double rating = double.Parse(fields[1]);
 
             movieDb.SetRatingToMovie(titleId, rating);
-        }
+        });
 
-
-
-        var tagList = XSVParser
-    <string[]>.Parse("resources/ml-latest/TagCodes_MovieLens.csv", ',', tagFields => tagFields);
-        Dictionary<int, string> tagsToNames = new Dictionary<int, string>();
-        foreach (var fields in tagList)
+        SeparatedFileProcessor.Process("resources/TagCodes_MovieLens.csv", ',', fields =>
         {
             int id = int.Parse(fields[0]);
             string name = fields[1];
 
-            tagsToNames[id] = name;
-        }
+            movieDb.UpdateTagName(id, name);
+        });
 
-        using (var reader = new StreamReader("resources/ml-latest/TagScores_MovieLens.csv"))
+        SeparatedFileProcessor.Process("resources/TagScores_MovieLens.csv", ',', fields =>
         {
+            string movieId = "tt" + fields[0].PadLeft(7, '0');
+            int tagId = int.Parse(fields[1]);
+            double relevance = double.Parse(fields[2]);
 
-            reader.ReadLine();
-
-            string line;
-            while ((line = reader.ReadLine()) != null)
+            if (relevance > 0.5)
             {
-                var fields = line.Split(',');
-                string movieId = fields[0];
-                int tagId = int.Parse(fields[1]);
-                double relevance = double.Parse(fields[2]);
-
-                if (relevance > 0.5)
+                var name = movieDb.GetTagName(tagId);
+                if (name != null)
                 {
-                    if (tagsToNames.ContainsKey(tagId))
-                    {
-                        movieDb.AddTagToMovie(tagsToNames[tagId], movieId);
-                    }
+                    movieDb.AddTagToMovie(name, movieId);
                 }
             }
-        }
-
-        string movieTitle = "Это случилось однажды ночью";
-        var movieSearch = movieDb.SearchMovieByTitle(movieTitle);
-        if (movieSearch != null)
-        {
-            Console.WriteLine(movieSearch);
-        }
-        else
-        {
-            Console.WriteLine("Фильм не найден.");
-        }
+        });
     }
 }
